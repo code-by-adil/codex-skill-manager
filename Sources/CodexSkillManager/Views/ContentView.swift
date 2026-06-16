@@ -32,5 +32,22 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .alert(
+            "Done",
+            isPresented: Binding(
+                get: { store.statusMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        store.statusMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK") {
+                store.statusMessage = nil
+            }
+        } message: {
+            Text(store.statusMessage ?? "")
+        }
     }
 }
