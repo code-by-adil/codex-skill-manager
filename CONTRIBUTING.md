@@ -19,6 +19,12 @@ swift test
 ./script/build_and_run.sh
 ```
 
+Install a local release build:
+
+```bash
+./script/install.sh
+```
+
 ## Before Opening a Pull Request
 
 Please run:
@@ -32,6 +38,12 @@ If your change touches app launch, menu bar behavior, or bundle staging, also ru
 
 ```bash
 ./script/build_and_run.sh --verify
+```
+
+If your change touches install or release packaging, run:
+
+```bash
+./script/package_release.sh
 ```
 
 ## Design Principles

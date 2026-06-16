@@ -17,6 +17,9 @@ This project follows a lightweight changelog format inspired by Keep a Changelog
 - Central inactive skill storage under Application Support, grouped by project.
 - Project removal confirmation that does not delete files on disk.
 - Local SwiftPM build, bundle, launch, and verification script.
+- Local install script for source-built installs without an Apple Developer account.
+- Unsigned release packaging script with SHA-256 checksums.
+- GitHub release workflow for tagged unsigned macOS zips.
 
 ### Changed
 

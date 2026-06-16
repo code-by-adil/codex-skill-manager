@@ -1,10 +1,10 @@
 # Codex Skill Manager
 
-A small macOS menu bar app for keeping Codex project skills powerful, focused, and easy to switch.
+A macOS menu bar app for enabling, disabling, copying, and moving Codex project skills.
 
-Codex discovers project-level skills from `.agents/skills/`. That is convenient until a project grows a large skill library. Keeping every possible skill active can pollute the context window, make tool selection noisier, and leave the agent carrying instructions it does not need for the task in front of it.
+Codex loads project-level skills from `.agents/skills/`. When that folder gets large, every active skill adds noise to the agent context.
 
-Codex Skill Manager gives you a simple control panel for that problem: keep a full skill library nearby, but only expose the skills you want Codex to see right now.
+Use Codex Skill Manager to keep `.agents/skills/` as the active skill set and move everything else into safe inactive storage.
 
 ## Why This Exists
 
@@ -61,9 +61,25 @@ When you enable it again, the app moves it back to:
 
 That means disabled skills do not sit inside your repository as renamed folders, hidden folders, or extra project-local directories. Your git status stays cleaner, and the active Codex context stays smaller.
 
-## Install From Source
+## Install
 
-Codex Skill Manager is currently distributed as source.
+Recommended install:
+
+```bash
+git clone <repository-url>
+cd CodexSkillManager
+./script/install.sh
+```
+
+That builds a release app locally, installs it to `~/Applications/CodexSkillManager.app`, and launches it. No Apple Developer account is required.
+
+To install into `/Applications` instead:
+
+```bash
+./script/install.sh --system
+```
+
+GitHub release zips are also available for convenience. They are unsigned, so macOS may ask you to right-click the app and choose Open the first time. If that feels annoying, use the source install command above.
 
 Requirements:
 
@@ -71,7 +87,7 @@ Requirements:
 - Xcode Command Line Tools
 - Swift 5.9 or newer
 
-Build and run:
+Build and run without installing:
 
 ```bash
 git clone <repository-url>
@@ -126,6 +142,9 @@ Tests/
   CodexSkillCoreTests/   Filesystem behavior tests
 script/
   build_and_run.sh       Local build, bundle, launch, and verification script
+  install.sh             Build and install to Applications
+  package_release.sh     Create an unsigned release zip
+  stage_app.sh           Stage the SwiftPM executable as a macOS app bundle
 docs/
   RELEASE.md             Release and packaging checklist
 ```
@@ -150,11 +169,23 @@ Build, stage, and launch the macOS app:
 ./script/build_and_run.sh
 ```
 
+Install the app locally:
+
+```bash
+./script/install.sh
+```
+
+Create an unsigned release zip:
+
+```bash
+./script/package_release.sh
+```
+
 The app is a SwiftPM macOS app. There is no Xcode project required for normal development.
 
 ## Release Status
 
-This project is ready for source-based open-source use. Signed and notarized binary distribution can be added by maintainers using the checklist in [docs/RELEASE.md](docs/RELEASE.md).
+This project is ready for source-based open-source use. It can also publish unsigned GitHub release zips without an Apple Developer account. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Contributing
 

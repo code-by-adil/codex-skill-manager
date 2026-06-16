@@ -1,6 +1,6 @@
 # Release Checklist
 
-This project currently ships best as source. Maintainers can use this checklist when preparing a tagged release or a signed macOS app bundle.
+This project can be released without an Apple Developer account. The recommended public install path is source-built local install with `./script/install.sh`. GitHub release zips are useful for convenience, but they are unsigned and macOS may warn on first launch.
 
 ## 1. Verify the Source Tree
 
@@ -20,26 +20,79 @@ Confirm:
 - A sample project can enable and disable a skill.
 - Disabled skills land under `~/Library/Application Support/CodexSkillManager/InactiveSkills/`.
 
-## 2. Stage the App Bundle
+## 2. Test Local Install
 
-The local build script creates:
+Run:
 
-```text
-dist/CodexSkillManager.app
+```bash
+./script/install.sh --user
 ```
 
-Inspect the bundle:
+This builds a release app, installs it to:
+
+```text
+~/Applications/CodexSkillManager.app
+```
+
+For a machine-wide install:
+
+```bash
+./script/install.sh --system
+```
+
+## 3. Create an Unsigned Release Zip
+
+Run:
+
+```bash
+VERSION=0.1.0 ./script/package_release.sh
+```
+
+The package script creates:
+
+```text
+dist/release/CodexSkillManager-0.1.0-macos.zip
+dist/release/CodexSkillManager-0.1.0-macos.zip.sha256
+```
+
+It also ad-hoc signs the app bundle. Ad-hoc signing is not Developer ID signing and does not notarize the app. It is enough for local integrity checks, not for removing Gatekeeper warnings on downloaded zips.
+
+Inspect the app bundle:
 
 ```bash
 plutil -p dist/CodexSkillManager.app/Contents/Info.plist
 find dist/CodexSkillManager.app -maxdepth 3 -type f
+codesign --verify --deep --strict --verbose=2 dist/CodexSkillManager.app
 ```
 
-For unsigned source releases, attach the source archive and tell users to build locally.
+## 4. Publish a GitHub Release
 
-## 3. Optional Developer ID Signing
+Push a version tag:
 
-For a downloadable app bundle, sign with a Developer ID Application certificate:
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow runs tests, creates the unsigned zip, writes a SHA-256 checksum, and attaches both files to the GitHub release.
+
+Release notes should include:
+
+- The recommended source install command:
+
+```bash
+git clone <repository-url>
+cd CodexSkillManager
+./script/install.sh
+```
+
+- A note that the zip is unsigned.
+- A note that macOS users may need to right-click the app and choose Open the first time.
+- The minimum macOS version.
+
+## 5. Optional Developer ID Path
+
+If a maintainer later gets an Apple Developer account, the same staged app can be Developer ID signed and notarized:
 
 ```bash
 codesign \
@@ -51,42 +104,8 @@ codesign \
   dist/CodexSkillManager.app
 ```
 
-Verify:
+Then zip, submit with `xcrun notarytool`, staple with `xcrun stapler`, and validate with:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 dist/CodexSkillManager.app
 spctl --assess --type execute --verbose=4 dist/CodexSkillManager.app
 ```
-
-## 4. Optional Notarization
-
-Create a zip for notarization:
-
-```bash
-ditto -c -k --keepParent dist/CodexSkillManager.app CodexSkillManager-macos.zip
-```
-
-Submit:
-
-```bash
-xcrun notarytool submit CodexSkillManager-macos.zip \
-  --keychain-profile "notarytool-profile" \
-  --wait
-```
-
-Staple:
-
-```bash
-xcrun stapler staple dist/CodexSkillManager.app
-spctl --assess --type execute --verbose=4 dist/CodexSkillManager.app
-```
-
-## 5. Publish
-
-Before creating the GitHub release:
-
-- Update `CHANGELOG.md`.
-- Tag the release.
-- Attach the source archive.
-- Attach the signed and notarized zip only if signing and notarization were completed.
-- Include the minimum macOS version and build-from-source command in the release notes.

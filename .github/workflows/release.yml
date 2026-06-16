@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build unsigned macOS app
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Package unsigned app
+        run: VERSION="${GITHUB_REF_NAME#v}" ./script/package_release.sh
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/release/*.zip
+            dist/release/*.sha256
+          body: |
+            Unsigned macOS build of Codex Skill Manager.
+
+            Recommended install path:
+
+            ```bash
+            git clone ${{ github.server_url }}/${{ github.repository }}.git
+            cd CodexSkillManager
+            ./script/install.sh
+            ```
+
+            The zip asset is provided for convenience. Because it is unsigned and not notarized, macOS may require right-clicking the app and choosing Open the first time.
