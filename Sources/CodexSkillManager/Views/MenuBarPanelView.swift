@@ -35,7 +35,7 @@ struct MenuBarPanelView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Label("Codex Skills", systemImage: "wand.and.stars")
+                Label("\(store.provider.label) Skills", systemImage: "wand.and.stars")
                     .font(.headline)
 
                 Spacer()
@@ -68,6 +68,17 @@ struct MenuBarPanelView: View {
                         Text(shortText(project.name)).tag(Optional(project.id))
                     }
                 }
+
+                Picker("Mode", selection: Binding(get: {
+                    store.provider
+                }, set: { provider in
+                    store.selectProvider(provider)
+                })) {
+                    ForEach(SkillProvider.allCases) { provider in
+                        Text(provider.label).tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
 
                 HStack {
                     TextField("Search", text: $searchText)
@@ -108,6 +119,11 @@ struct MenuBarPanelView: View {
                                     },
                                     onTransfer: { destinationProject, mode in
                                         store.transfer(skill, to: destinationProject, mode: mode)
+                                    },
+                                    onChooseDestination: { mode in
+                                        if let destinationURL = ProjectOpenPanel.selectTransferDestination() {
+                                            store.transfer(skill, toProjectAt: destinationURL, mode: mode)
+                                        }
                                     }
                                 )
                             }
@@ -122,10 +138,27 @@ struct MenuBarPanelView: View {
                         Text("\(store.activeCount(for: project)) on")
                         Text("\(store.inactiveCount(for: project)) off")
                         Spacer()
-                        Button("Disable All") {
-                            store.disableAll(in: project)
+                        if store.activeCount(for: project) > 0 {
+                            Button("Disable All") {
+                                store.disableAll(in: project)
+                            }
+                        } else {
+                            Button("Enable All") {
+                                store.enableAll(in: project)
+                            }
+                            .disabled(store.inactiveCount(for: project) == 0)
                         }
-                        .disabled(store.activeCount(for: project) == 0)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    HStack {
+                        Button("Convert to Claude") {
+                            store.copyCodexSkillsToClaude(in: project)
+                        }
+                        .buttonStyle(.link)
+
+                        Spacer()
 
                         Button("Add Project...") {
                             store.addProjects(ProjectOpenPanel.selectProjects())
@@ -139,6 +172,40 @@ struct MenuBarPanelView: View {
         }
         .padding(12)
         .frame(width: 380, height: 500)
+        .alert(
+            "Skill operation failed",
+            isPresented: Binding(
+                get: { store.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        store.errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK") {
+                store.errorMessage = nil
+            }
+        } message: {
+            Text(store.errorMessage ?? "")
+        }
+        .alert(
+            "Done",
+            isPresented: Binding(
+                get: { store.statusMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        store.statusMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK") {
+                store.statusMessage = nil
+            }
+        } message: {
+            Text(store.statusMessage ?? "")
+        }
     }
 }
 
@@ -147,6 +214,7 @@ private struct MenuSkillRow: View {
     let destinationProjects: [SkillProject]
     let onToggle: () -> Void
     let onTransfer: (SkillProject, SkillTransferMode) -> Void
+    let onChooseDestination: (SkillTransferMode) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -183,24 +251,33 @@ private struct MenuSkillRow: View {
             .buttonStyle(.plain)
 
             Menu {
-                if destinationProjects.isEmpty {
-                    Button("Add another project first") {}
-                        .disabled(true)
-                } else {
-                    Menu("Copy To") {
+                Menu("Copy To") {
+                    if !destinationProjects.isEmpty {
                         ForEach(destinationProjects) { project in
                             Button(project.name) {
                                 onTransfer(project, .copy)
                             }
                         }
+                        Divider()
                     }
 
-                    Menu("Move To") {
+                    Button("Choose Project...") {
+                        onChooseDestination(.copy)
+                    }
+                }
+
+                Menu("Move To") {
+                    if !destinationProjects.isEmpty {
                         ForEach(destinationProjects) { project in
                             Button(project.name) {
                                 onTransfer(project, .move)
                             }
                         }
+                        Divider()
+                    }
+
+                    Button("Choose Project...") {
+                        onChooseDestination(.move)
                     }
                 }
             } label: {
