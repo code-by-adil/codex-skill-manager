@@ -7,13 +7,16 @@ final class SkillStore: ObservableObject {
     @Published private(set) var projects: [SkillProject]
     @Published private(set) var skillsByProjectID: [UUID: [SkillItem]] = [:]
     @Published private(set) var projectErrors: [UUID: String] = [:]
+    @Published private(set) var provider: SkillProvider
     @Published var selectedProjectID: UUID?
     @Published var errorMessage: String?
+    @Published var statusMessage: String?
 
     private let service: SkillFileService
     private let defaults: UserDefaults
     private let projectsKey = "projects.v1"
     private let selectedProjectKey = "selectedProjectID.v1"
+    private let providerKey = "provider.v1"
 
     init(service: SkillFileService = SkillFileService(), defaults: UserDefaults = .standard) {
         self.service = service
@@ -21,6 +24,7 @@ final class SkillStore: ObservableObject {
 
         let storedProjects = Self.loadProjects(from: defaults, key: projectsKey)
         self.projects = storedProjects.isEmpty ? Self.defaultProjects() : storedProjects
+        self.provider = Self.loadProvider(from: defaults, key: providerKey)
 
         if let selectedIDString = defaults.string(forKey: selectedProjectKey),
            let selectedID = UUID(uuidString: selectedIDString),
@@ -55,6 +59,16 @@ final class SkillStore: ObservableObject {
 
     func transferDestinations(for skill: SkillItem) -> [SkillProject] {
         projects.filter { $0.id != skill.projectID }
+    }
+
+    func selectProvider(_ provider: SkillProvider) {
+        guard self.provider != provider else {
+            return
+        }
+
+        self.provider = provider
+        defaults.set(provider.rawValue, forKey: providerKey)
+        refresh()
     }
 
     func selectProject(_ id: UUID?) {
@@ -106,7 +120,7 @@ final class SkillStore: ObservableObject {
 
         for project in projects {
             do {
-                nextSkills[project.id] = try service.scan(project: project)
+                nextSkills[project.id] = try service.scan(project: project, provider: provider)
             } catch {
                 nextSkills[project.id] = []
                 nextErrors[project.id] = error.localizedDescription
@@ -123,7 +137,7 @@ final class SkillStore: ObservableObject {
         }
 
         do {
-            try service.setEnabled(skill, enabled: !skill.isEnabled, in: project)
+            try service.setEnabled(skill, enabled: !skill.isEnabled, in: project, provider: provider)
             refresh()
         } catch {
             errorMessage = error.localizedDescription
@@ -133,7 +147,7 @@ final class SkillStore: ObservableObject {
 
     func transfer(_ skill: SkillItem, to destinationProject: SkillProject, mode: SkillTransferMode) {
         do {
-            try service.transfer(skill, to: destinationProject, mode: mode)
+            try service.transfer(skill, to: destinationProject, mode: mode, provider: provider)
             refresh()
         } catch {
             errorMessage = error.localizedDescription
@@ -141,10 +155,37 @@ final class SkillStore: ObservableObject {
         }
     }
 
+    func transfer(_ skill: SkillItem, toProjectAt url: URL, mode: SkillTransferMode) {
+        let normalizedProject = SkillProject(path: url.path)
+        let destinationProject = projects.first { $0.path == normalizedProject.path } ?? normalizedProject
+        transfer(skill, to: destinationProject, mode: mode)
+    }
+
     func disableAll(in project: SkillProject) {
         do {
-            try service.disableAll(in: project)
+            try service.disableAll(in: project, provider: provider)
             refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+            refresh()
+        }
+    }
+
+    func enableAll(in project: SkillProject) {
+        do {
+            try service.enableAll(in: project, provider: provider)
+            refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+            refresh()
+        }
+    }
+
+    func copyCodexSkillsToClaude(in project: SkillProject) {
+        do {
+            let result = try service.copyCodexSkillsToClaude(in: project)
+            selectProvider(.claude)
+            statusMessage = "Copied \(result.copiedTotal) skills to Claude. Skipped \(result.skippedExisting) existing skills."
         } catch {
             errorMessage = error.localizedDescription
             refresh()
@@ -153,11 +194,11 @@ final class SkillStore: ObservableObject {
 
     func revealDirectory(for project: SkillProject, state: SkillState) {
         let directory = state == .active
-            ? service.activeDirectory(for: project)
-            : service.inactiveDirectory(for: project)
+            ? service.activeDirectory(for: project, provider: provider)
+            : service.inactiveDirectory(for: project, provider: provider)
 
         do {
-            try service.ensureProjectSkillDirectories(for: project)
+            try service.ensureProjectSkillDirectories(for: project, provider: provider)
             NSWorkspace.shared.activateFileViewerSelecting([directory])
         } catch {
             errorMessage = error.localizedDescription
@@ -185,6 +226,15 @@ final class SkillStore: ObservableObject {
         return projects
     }
 
+    private static func loadProvider(from defaults: UserDefaults, key: String) -> SkillProvider {
+        guard let rawValue = defaults.string(forKey: key),
+              let provider = SkillProvider(rawValue: rawValue) else {
+            return .codex
+        }
+
+        return provider
+    }
+
     private static func defaultProjects() -> [SkillProject] {
         let fileManager = FileManager.default
         let homeURL = fileManager.homeDirectoryForCurrentUser
@@ -199,7 +249,8 @@ final class SkillStore: ObservableObject {
 
         return candidates.reduce(into: [SkillProject]()) { result, url in
             let agentsURL = url.appendingPathComponent(SkillFileService.agentsDirectoryName, isDirectory: true)
-            guard fileManager.fileExists(atPath: agentsURL.path) else {
+            let claudeURL = url.appendingPathComponent(SkillFileService.claudeDirectoryName, isDirectory: true)
+            guard fileManager.fileExists(atPath: agentsURL.path) || fileManager.fileExists(atPath: claudeURL.path) else {
                 return
             }
 
