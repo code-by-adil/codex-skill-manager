@@ -2,11 +2,12 @@ import Foundation
 
 public struct SkillItem: Identifiable, Hashable, Sendable {
     public var id: String {
-        "\(projectID.uuidString)|\(state.rawValue)|\(name)"
+        "\(projectID.uuidString)|\(provider.rawValue)|\(state.rawValue)|\(name)"
     }
 
     public let projectID: UUID
     public let projectPath: String
+    public let provider: SkillProvider
     public let name: String
     public let state: SkillState
     public let url: URL
@@ -15,6 +16,7 @@ public struct SkillItem: Identifiable, Hashable, Sendable {
     public init(
         projectID: UUID,
         projectPath: String,
+        provider: SkillProvider,
         name: String,
         state: SkillState,
         url: URL,
@@ -22,6 +24,7 @@ public struct SkillItem: Identifiable, Hashable, Sendable {
     ) {
         self.projectID = projectID
         self.projectPath = projectPath
+        self.provider = provider
         self.name = name
         self.state = state
         self.url = url
