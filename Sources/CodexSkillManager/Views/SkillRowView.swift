@@ -6,6 +6,7 @@ struct SkillRowView: View {
     let destinationProjects: [SkillProject]
     let onToggle: () -> Void
     let onTransfer: (SkillProject, SkillTransferMode) -> Void
+    let onChooseDestination: (SkillTransferMode) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -43,8 +44,9 @@ struct SkillRowView: View {
             TransferDestinationMenu(
                 title: "Copy",
                 systemImage: "doc.on.doc",
-                disabledHelp: "Add another project before copying skills",
-                destinationProjects: destinationProjects
+                destinationProjects: destinationProjects,
+                mode: .copy,
+                onChooseDestination: onChooseDestination
             ) { destinationProject in
                 onTransfer(destinationProject, .copy)
             }
@@ -52,8 +54,9 @@ struct SkillRowView: View {
             TransferDestinationMenu(
                 title: "Move",
                 systemImage: "arrowshape.turn.up.right",
-                disabledHelp: "Add another project before moving skills",
-                destinationProjects: destinationProjects
+                destinationProjects: destinationProjects,
+                mode: .move,
+                onChooseDestination: onChooseDestination
             ) { destinationProject in
                 onTransfer(destinationProject, .move)
             }
@@ -69,31 +72,30 @@ struct SkillRowView: View {
 struct TransferDestinationMenu: View {
     let title: String
     let systemImage: String
-    let disabledHelp: String
     let destinationProjects: [SkillProject]
+    let mode: SkillTransferMode
+    let onChooseDestination: (SkillTransferMode) -> Void
     let onSelect: (SkillProject) -> Void
 
     var body: some View {
-        if destinationProjects.isEmpty {
-            Button {} label: {
-                Label(title, systemImage: systemImage)
-            }
-            .controlSize(.small)
-            .disabled(true)
-            .help(disabledHelp)
-        } else {
-            Menu {
+        Menu {
+            if !destinationProjects.isEmpty {
                 ForEach(destinationProjects) { project in
                     Button(project.name) {
                         onSelect(project)
                     }
                 }
-            } label: {
-                Label(title, systemImage: systemImage)
+                Divider()
             }
-            .menuStyle(.button)
-            .controlSize(.small)
-            .help("\(title) to another project")
+
+            Button("Choose Project...") {
+                onChooseDestination(mode)
+            }
+        } label: {
+            Label(title, systemImage: systemImage)
         }
+        .menuStyle(.button)
+        .controlSize(.small)
+        .help("\(title) to a saved or selected project")
     }
 }

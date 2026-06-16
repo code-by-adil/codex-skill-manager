@@ -79,6 +79,11 @@ struct ProjectDetailView: View {
                         onToggle: { store.toggle(skill) },
                         onTransfer: { destinationProject, mode in
                             store.transfer(skill, to: destinationProject, mode: mode)
+                        },
+                        onChooseDestination: { mode in
+                            if let destinationURL = ProjectOpenPanel.selectTransferDestination() {
+                                store.transfer(skill, toProjectAt: destinationURL, mode: mode)
+                            }
                         }
                     )
                 }
@@ -94,47 +99,91 @@ private struct ProjectHeaderView: View {
     let project: SkillProject
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(project.name)
-                    .font(.title2.weight(.semibold))
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(project.name)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(1)
 
-                Text(project.path)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    Text(project.path)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    CountBadge(title: "Enabled", count: store.activeCount(for: project), color: .green)
+                    CountBadge(title: "Disabled", count: store.inactiveCount(for: project), color: .secondary)
+                }
             }
 
-            Spacer()
+            HStack(spacing: 10) {
+                Picker("Mode", selection: Binding(get: {
+                    store.provider
+                }, set: { provider in
+                    store.selectProvider(provider)
+                })) {
+                    ForEach(SkillProvider.allCases) { provider in
+                        Text(provider.label).tag(provider)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 168)
+                .help("Choose which project skill directory to manage")
 
-            CountBadge(title: "Enabled", count: store.activeCount(for: project), color: .green)
-            CountBadge(title: "Disabled", count: store.inactiveCount(for: project), color: .secondary)
+                Spacer(minLength: 12)
 
-            Button {
-                store.disableAll(in: project)
-            } label: {
-                Label("Disable All", systemImage: "archivebox.fill")
+                HeaderActionButton(
+                    title: "Convert to Claude",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    help: "Copy Codex skills to this project's Claude skill folders"
+                ) {
+                    store.copyCodexSkillsToClaude(in: project)
+                }
+
+                if store.activeCount(for: project) > 0 {
+                    HeaderActionButton(
+                        title: "Disable All",
+                        systemImage: "archivebox.fill",
+                        help: "Move all enabled skills to inactive skills"
+                    ) {
+                        store.disableAll(in: project)
+                    }
+                } else {
+                    HeaderActionButton(
+                        title: "Enable All",
+                        systemImage: "checkmark.circle.fill",
+                        help: "Move all disabled skills back to active skills",
+                        isDisabled: store.inactiveCount(for: project) == 0
+                    ) {
+                        store.enableAll(in: project)
+                    }
+                }
+
+                Menu {
+                    Button("Enabled Skills Folder") {
+                        store.revealDirectory(for: project, state: .active)
+                    }
+
+                    Button("Disabled Skills Folder") {
+                        store.revealDirectory(for: project, state: .inactive)
+                    }
+                } label: {
+                    Label("Folders", systemImage: "folder")
+                }
+                .menuStyle(.button)
+                .controlSize(.regular)
+                .help("Reveal skill folders")
             }
-            .disabled(store.activeCount(for: project) == 0)
-            .help("Move all enabled skills to inactive skills")
-
-            Button {
-                store.revealDirectory(for: project, state: .active)
-            } label: {
-                Label("Enabled", systemImage: "folder")
-            }
-            .help("Reveal enabled skills")
-
-            Button {
-                store.revealDirectory(for: project, state: .inactive)
-            } label: {
-                Label("Disabled", systemImage: "archivebox")
-            }
-            .help("Reveal disabled skills")
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -144,7 +193,7 @@ private struct CountBadge: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 2) {
+        HStack(spacing: 7) {
             Text("\(count)")
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
@@ -153,12 +202,32 @@ private struct CountBadge: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .frame(width: 74)
-        .padding(.vertical, 6)
+        .frame(minWidth: 98)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(color.opacity(0.35), lineWidth: 1)
         }
+    }
+}
+
+private struct HeaderActionButton: View {
+    let title: String
+    let systemImage: String
+    let help: String
+    var isDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .lineLimit(1)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .disabled(isDisabled)
+        .help(help)
     }
 }
