@@ -81,7 +81,7 @@ Release notes should include:
 - The recommended source install command:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/code-by-adil/codex-skill-manager.git
 cd CodexSkillManager
 ./script/install.sh
 ```

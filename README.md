@@ -66,7 +66,7 @@ That means disabled skills do not sit inside your repository as renamed folders,
 Recommended install:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/code-by-adil/codex-skill-manager.git
 cd CodexSkillManager
 ./script/install.sh
 ```
@@ -90,7 +90,7 @@ Requirements:
 Build and run without installing:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/code-by-adil/codex-skill-manager.git
 cd CodexSkillManager
 swift test
 ./script/build_and_run.sh
