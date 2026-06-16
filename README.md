@@ -6,6 +6,34 @@ Codex loads project-level skills from `.agents/skills/`. When that folder gets l
 
 Use Codex Skill Manager to keep `.agents/skills/` as the active skill set and move everything else into safe inactive storage.
 
+## Install
+
+Requirements:
+
+- macOS 14 or newer
+- Xcode Command Line Tools
+- Swift 5.9 or newer
+
+```bash
+git clone https://github.com/code-by-adil/codex-skill-manager.git
+cd codex-skill-manager
+./script/install.sh
+```
+
+The install script builds the app and copies it to:
+
+```text
+~/Applications/CodexSkillManager.app
+```
+
+To install into `/Applications`:
+
+```bash
+./script/install.sh --system
+```
+
+GitHub releases may include a prebuilt app archive. If macOS blocks the downloaded app on first launch, right-click the app and choose Open.
+
 ## Why This Exists
 
 Some projects collect dozens or hundreds of skills over time:
@@ -61,53 +89,6 @@ When you enable it again, the app moves it back to:
 
 That means disabled skills do not sit inside your repository as renamed folders, hidden folders, or extra project-local directories. Your git status stays cleaner, and the active Codex context stays smaller.
 
-## Install
-
-Recommended install:
-
-```bash
-git clone https://github.com/code-by-adil/codex-skill-manager.git
-cd CodexSkillManager
-./script/install.sh
-```
-
-That builds a release app locally, installs it to `~/Applications/CodexSkillManager.app`, and launches it. No Apple Developer account is required.
-
-To install into `/Applications` instead:
-
-```bash
-./script/install.sh --system
-```
-
-GitHub release zips are also available for convenience. They are unsigned, so macOS may ask you to right-click the app and choose Open the first time. If that feels annoying, use the source install command above.
-
-Requirements:
-
-- macOS 14 or newer
-- Xcode Command Line Tools
-- Swift 5.9 or newer
-
-Build and run without installing:
-
-```bash
-git clone https://github.com/code-by-adil/codex-skill-manager.git
-cd CodexSkillManager
-swift test
-./script/build_and_run.sh
-```
-
-The script builds the SwiftPM app, stages a local app bundle, and launches it:
-
-```text
-dist/CodexSkillManager.app
-```
-
-To verify the launch from the command line:
-
-```bash
-./script/build_and_run.sh --verify
-```
-
 ## Daily Workflow
 
 1. Add a Codex project from the sidebar.
@@ -132,24 +113,14 @@ Codex Skill Manager is intentionally conservative:
 
 If an older version of the app or a manual workflow left disabled skills in a project-local inactive folder, the app migrates those disabled skills to the central inactive store during scanning.
 
-## Project Structure
-
-```text
-Sources/
-  CodexSkillCore/        File operations, models, and tests
-  CodexSkillManager/     SwiftUI app, menu bar UI, and project store
-Tests/
-  CodexSkillCoreTests/   Filesystem behavior tests
-script/
-  build_and_run.sh       Local build, bundle, launch, and verification script
-  install.sh             Build and install to Applications
-  package_release.sh     Create an unsigned release zip
-  stage_app.sh           Stage the SwiftPM executable as a macOS app bundle
-docs/
-  RELEASE.md             Release and packaging checklist
-```
-
 ## Development
+
+Clone the repository:
+
+```bash
+git clone https://github.com/code-by-adil/codex-skill-manager.git
+cd codex-skill-manager
+```
 
 Run tests:
 
@@ -163,19 +134,19 @@ Build without launching:
 swift build
 ```
 
-Build, stage, and launch the macOS app:
+Build, stage, and launch the app:
 
 ```bash
 ./script/build_and_run.sh
 ```
 
-Install the app locally:
+Verify app launch:
 
 ```bash
-./script/install.sh
+./script/build_and_run.sh --verify
 ```
 
-Create an unsigned release zip:
+Create a release archive:
 
 ```bash
 ./script/package_release.sh
@@ -183,9 +154,22 @@ Create an unsigned release zip:
 
 The app is a SwiftPM macOS app. There is no Xcode project required for normal development.
 
-## Release Status
+## Project Structure
 
-This project is ready for source-based open-source use. It can also publish unsigned GitHub release zips without an Apple Developer account. See [docs/RELEASE.md](docs/RELEASE.md).
+```text
+Sources/
+  CodexSkillCore/        File operations, models, and tests
+  CodexSkillManager/     SwiftUI app, menu bar UI, and project store
+Tests/
+  CodexSkillCoreTests/   Filesystem behavior tests
+script/
+  build_and_run.sh       Local build, bundle, launch, and verification script
+  install.sh             Build and install to Applications
+  package_release.sh     Create a release archive
+  stage_app.sh           Stage the SwiftPM executable as a macOS app bundle
+docs/
+  RELEASE.md             Release and packaging checklist
+```
 
 ## Contributing
 

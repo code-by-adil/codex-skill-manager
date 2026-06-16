@@ -1,6 +1,6 @@
 # Release Checklist
 
-This project can be released without an Apple Developer account. The recommended public install path is source-built local install with `./script/install.sh`. GitHub release zips are useful for convenience, but they are unsigned and macOS may warn on first launch.
+The recommended public install path is source-built local install with `./script/install.sh`. GitHub release archives are useful for convenience, but macOS may warn on first launch.
 
 ## 1. Verify the Source Tree
 
@@ -40,7 +40,7 @@ For a machine-wide install:
 ./script/install.sh --system
 ```
 
-## 3. Create an Unsigned Release Zip
+## 3. Create a Release Archive
 
 Run:
 
@@ -55,7 +55,7 @@ dist/release/CodexSkillManager-0.1.0-macos.zip
 dist/release/CodexSkillManager-0.1.0-macos.zip.sha256
 ```
 
-It also ad-hoc signs the app bundle. Ad-hoc signing is not Developer ID signing and does not notarize the app. It is enough for local integrity checks, not for removing Gatekeeper warnings on downloaded zips.
+It also ad-hoc signs the app bundle. Ad-hoc signing is enough for local integrity checks, but it is not the same as Developer ID signing.
 
 Inspect the app bundle:
 
@@ -74,7 +74,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow runs tests, creates the unsigned zip, writes a SHA-256 checksum, and attaches both files to the GitHub release.
+The release workflow runs tests, creates the archive, writes a SHA-256 checksum, and attaches both files to the GitHub release.
 
 Release notes should include:
 
@@ -82,17 +82,16 @@ Release notes should include:
 
 ```bash
 git clone https://github.com/code-by-adil/codex-skill-manager.git
-cd CodexSkillManager
+cd codex-skill-manager
 ./script/install.sh
 ```
 
-- A note that the zip is unsigned.
 - A note that macOS users may need to right-click the app and choose Open the first time.
 - The minimum macOS version.
 
 ## 5. Optional Developer ID Path
 
-If a maintainer later gets an Apple Developer account, the same staged app can be Developer ID signed and notarized:
+If maintainers later want signed downloads, the same staged app can be Developer ID signed and notarized:
 
 ```bash
 codesign \
