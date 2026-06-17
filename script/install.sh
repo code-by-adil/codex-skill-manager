@@ -50,6 +50,7 @@ CONFIGURATION=release "$ROOT_DIR/script/stage_app.sh"
 mkdir -p "$INSTALL_DIR"
 rm -rf "$DESTINATION"
 /usr/bin/ditto "$APP_BUNDLE" "$DESTINATION"
+rm -rf "$APP_BUNDLE"
 
 if command -v xattr >/dev/null 2>&1; then
   xattr -dr com.apple.quarantine "$DESTINATION" >/dev/null 2>&1 || true
