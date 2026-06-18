@@ -1,10 +1,10 @@
 # Codex Skill Manager
 
-A macOS menu bar app for enabling, disabling, copying, and moving Codex project skills.
+A macOS app for keeping Codex project, global Codex, and global agent skills organized into intentional active sets.
 
 Codex loads project-level skills from `.agents/skills/`. When that folder gets large, every active skill adds noise to the agent context.
 
-Use Codex Skill Manager to keep `.agents/skills/` as the active skill set and move everything else into safe inactive storage.
+Use Codex Skill Manager to keep project and global skill folders focused, package related skills together, and move everything else into safe inactive storage.
 
 ## Install
 
@@ -51,21 +51,57 @@ my-project/
 
 Every active project skill is context Codex may need to consider. This app lets you treat `.agents/skills/` as the active working set instead of a permanent warehouse.
 
-The goal is not to delete skills. The goal is to make Codex sharper by keeping the active set intentional.
+The default workflow is not to delete skills. The goal is to make Codex sharper by keeping the active set intentional, with permanent deletion available when you really want to remove a skill.
 
-## Features
+## Feature Overview
 
-- Enable or disable project-level Codex skills with one click.
-- Use the menu bar panel for quick switching without opening a full window.
-- Search and filter skills by enabled, disabled, or all.
+### Skill Sources
+
+- Manage project Codex skills in `<project>/.agents/skills/`.
+- Switch project views between Codex (`.agents`) and Claude (`.claude`) skill folders.
+- Manage global Codex skills from `~/.codex/skills/`.
+- Manage global agent skills from `~/.agents/skills/`.
+- See active and inactive counts for every project and global source in the sidebar.
+
+### Enable, Disable, and Search
+
+- Enable or disable individual skills with one click.
 - Disable all skills when you want a clean project context.
 - Enable all skills when you want the full library back.
+- Search skills by name or summary.
+- Filter skills by All, Enabled, or Disabled.
+- Keep disabled skills outside your git worktree in app-owned inactive storage.
+
+### Skill Packages
+
+- Create named packages from existing project or global skills.
+- Use packages for task bundles, such as auth, security, deployment, or mobile debugging skill sets.
+- Add a skill to an existing package from that skill's row.
+- Edit packages later to add or remove skills.
+- Enable or disable every skill in a package as one unit.
+- Copy or move a whole package to another project or global skill source.
+- Search results show package matches without duplicating packaged skills in the main list.
+- Use the dedicated package management sheet to manage individual packaged skills without cluttering the main skill list.
+- Remove a skill from a package without deleting the skill folder.
+- Delete a package grouping without deleting the included skill folders.
+
+### Copy, Move, and Delete
+
 - Copy or move skills between Codex projects.
+- Copy or move skills between global skill folders and project skill folders.
+- Copy or move skills between Global Codex and Global Agents.
+- Copy or move individual skills from inside a package while preserving package membership at the destination.
 - Pick any destination project from Finder, even if it has not been added to the app yet.
-- Keep disabled skills outside your git worktree in app-owned storage.
+- Delete project or global skills permanently after confirmation.
+- Refuse to overwrite existing destination skill folders.
+
+### App Experience
+
+- Use the full window for detailed project, global, and package management.
+- Use the menu bar panel for quick switching without opening the full window.
 - Remove projects from the manager without deleting project files.
-- Preview active and inactive skill counts per project.
-- Optional Claude mode can mirror Codex skills into that project's agent skill folder.
+- Reveal active and inactive skill folders in Finder.
+- Install locally from source or build a GitHub release archive.
 
 ## How It Works
 
@@ -89,6 +125,20 @@ When you enable it again, the app moves it back to:
 
 That means disabled skills do not sit inside your repository as renamed folders, hidden folders, or extra project-local directories. Your git status stays cleaner, and the active Codex context stays smaller.
 
+Global skills are managed from a separate Global Skills section:
+
+```text
+~/.codex/skills/
+~/.agents/skills/
+```
+
+When you disable a global skill, the app moves it into app-owned inactive storage:
+
+```text
+~/Library/Application Support/CodexSkillManager/InactiveSkills/global/codex/inactive-skills/
+~/Library/Application Support/CodexSkillManager/InactiveSkills/global/agents/inactive-skills/
+```
+
 ## Daily Workflow
 
 1. Add a Codex project from the sidebar.
@@ -97,17 +147,23 @@ That means disabled skills do not sit inside your repository as renamed folders,
 4. Re-enable specialized skills when the task calls for them.
 5. Copy or move useful skills into other projects as your library improves.
 
+Use the Global Skills section for machine-wide Codex or agent skills that should be enabled or disabled outside a single project.
+
+Use packages for task bundles that you commonly need together. For example, create an Auth package from email, session, security, and backend skills, then enable or move that package as one unit later. You can edit the package later, add a newly discovered skill from its row, or open the package manager to remove, move, copy, enable, disable, or delete individual packaged skills.
+
 For large projects, a good starting point is to keep only the handful of skills you use every day enabled, then enable focused skills just before asking Codex to work in that domain.
 
 ## Safety Model
 
 Codex Skill Manager is intentionally conservative:
 
-- It manages project-level skills only.
-- It does not manage global Codex skills.
+- It manages project-level skills and supported global skill folders only.
+- It does not manage arbitrary folders outside configured project and global skill locations.
 - It does not edit skill contents.
+- It can permanently delete a skill only after explicit confirmation.
 - It refuses to overwrite an existing skill at the destination.
 - It creates missing skill folders only when needed.
+- Deleting a package removes only the grouping. It does not delete the included skill folders.
 - It stores disabled skills in Application Support, outside the project worktree.
 - Removing a project from the app removes it only from the app list. It does not delete the project or its skills.
 

@@ -8,10 +8,30 @@ struct ProjectSidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             List(selection: Binding(get: {
-                store.selectedProjectID
+                store.selectedSidebarItemID
             }, set: { newValue in
-                store.selectProject(newValue)
+                store.selectSidebarItem(newValue)
             })) {
+                Section("Global Skills") {
+                    ForEach(GlobalSkillLocation.allCases) { location in
+                        GlobalSidebarRow(
+                            location: location,
+                            enabledCount: store.activeCount(for: location),
+                            disabledCount: store.inactiveCount(for: location),
+                            hasError: store.globalErrors[location.id] != nil
+                        )
+                        .tag(store.sidebarID(for: location))
+                        .contextMenu {
+                            Button("Reveal Enabled Skills") {
+                                store.revealGlobalDirectory(for: location, state: .active)
+                            }
+                            Button("Reveal Disabled Skills") {
+                                store.revealGlobalDirectory(for: location, state: .inactive)
+                            }
+                        }
+                    }
+                }
+
                 Section("Projects") {
                     ForEach(store.projects) { project in
                         ProjectSidebarRow(
@@ -23,7 +43,7 @@ struct ProjectSidebarView: View {
                                 projectPendingRemoval = project
                             }
                         )
-                        .tag(project.id)
+                        .tag(store.sidebarID(for: project))
                         .contextMenu {
                             Button("Reveal Enabled Skills") {
                                 store.revealDirectory(for: project, state: .active)
@@ -107,6 +127,49 @@ struct ProjectSidebarView: View {
                 }
             }
         )
+    }
+}
+
+private struct GlobalSidebarRow: View {
+    let location: GlobalSkillLocation
+    let enabledCount: Int
+    let disabledCount: Int
+    let hasError: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImageName)
+                .foregroundStyle(hasError ? .orange : .secondary)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(location.label)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Text("\(enabledCount) on, \(disabledCount) off")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var systemImageName: String {
+        if hasError {
+            return "exclamationmark.triangle"
+        }
+
+        switch location {
+        case .codex:
+            return "globe"
+        case .agents:
+            return "person.2"
+        }
     }
 }
 

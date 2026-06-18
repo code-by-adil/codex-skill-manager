@@ -1,9 +1,9 @@
 import CodexSkillCore
 import SwiftUI
 
-struct ProjectDetailView: View {
+struct GlobalSkillDetailView: View {
     @ObservedObject var store: SkillStore
-    let project: SkillProject
+    let location: GlobalSkillLocation
 
     @State private var filter: SkillFilter = .all
     @State private var searchText = ""
@@ -12,7 +12,7 @@ struct ProjectDetailView: View {
     @State private var packageBeingManaged: SkillPackage?
 
     private var visibleSkills: [SkillItem] {
-        store.skills(for: project)
+        store.globalSkills(for: location)
             .filter { !packagedSkillNames.contains($0.name) }
             .filter { skill in
                 switch filter {
@@ -34,8 +34,12 @@ struct ProjectDetailView: View {
             }
     }
 
+    private var otherGlobalLocations: [GlobalSkillLocation] {
+        GlobalSkillLocation.allCases.filter { $0 != location }
+    }
+
     private var packages: [SkillPackage] {
-        store.packages(for: project, provider: store.provider)
+        store.packages(for: location)
     }
 
     private var visiblePackages: [SkillPackage] {
@@ -51,15 +55,11 @@ struct ProjectDetailView: View {
         Set(packages.flatMap(\.skillNames))
     }
 
-    private var packageDestinationProjects: [SkillProject] {
-        store.projects.filter { $0.id != project.id }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            ProjectHeaderView(
+            GlobalSkillHeaderView(
                 store: store,
-                project: project,
+                location: location,
                 onCreatePackage: { isCreatingPackage = true }
             )
 
@@ -86,8 +86,8 @@ struct ProjectDetailView: View {
             }
             .padding()
 
-            if let projectError = store.projectErrors[project.id] {
-                Label(projectError, systemImage: "exclamationmark.triangle")
+            if let globalError = store.globalErrors[location.id] {
+                Label(globalError, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
                     .padding(.horizontal)
                     .padding(.bottom, 8)
@@ -97,8 +97,8 @@ struct ProjectDetailView: View {
                 SkillPackageSectionView(
                     store: store,
                     packages: packages,
-                    destinationProjects: packageDestinationProjects,
-                    globalDestinations: GlobalSkillLocation.allCases,
+                    destinationProjects: store.projects,
+                    globalDestinations: otherGlobalLocations,
                     filter: filter,
                     searchText: searchText,
                     onManagePackage: { package in
@@ -121,27 +121,27 @@ struct ProjectDetailView: View {
                 ContentUnavailableView {
                     Label("No Skills", systemImage: "wand.and.stars.inverse")
                 } description: {
-                    Text("No project skills match the current view.")
+                    Text("No global skills match the current view.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if !visibleSkills.isEmpty {
                 List(visibleSkills) { skill in
                     SkillRowView(
                         skill: skill,
-                        destinationProjects: store.transferDestinations(for: skill),
-                        globalDestinations: GlobalSkillLocation.allCases,
+                        destinationProjects: store.projects,
+                        globalDestinations: otherGlobalLocations,
                         packages: packages,
-                        onToggle: { store.toggle(skill) },
+                        onToggle: { store.toggleGlobal(skill, in: location) },
                         onTransfer: { destinationProject, mode in
-                            store.transfer(skill, to: destinationProject, mode: mode)
+                            store.transferGlobal(skill, to: destinationProject, mode: mode)
                         },
                         onChooseDestination: { mode in
                             if let destinationURL = ProjectOpenPanel.selectTransferDestination() {
-                                store.transfer(skill, toProjectAt: destinationURL, mode: mode)
+                                store.transferGlobal(skill, toProjectAt: destinationURL, mode: mode)
                             }
                         },
-                        onTransferToGlobal: { location, mode in
-                            store.transfer(skill, toGlobal: location, mode: mode)
+                        onTransferToGlobal: { destinationLocation, mode in
+                            store.transfer(skill, toGlobal: destinationLocation, mode: mode)
                         },
                         onAddToPackage: { package in
                             store.add(skill, to: package)
@@ -156,14 +156,14 @@ struct ProjectDetailView: View {
                 Spacer(minLength: 0)
             }
         }
-        .navigationTitle(project.name)
+        .navigationTitle(location.label)
         .sheet(isPresented: $isCreatingPackage) {
             SkillPackageEditorView(
                 title: "New Package",
-                skills: store.skills(for: project),
+                skills: store.globalSkills(for: location),
                 onCancel: { isCreatingPackage = false },
                 onSave: { name, skillNames in
-                    store.createPackage(named: name, skillNames: skillNames, for: project, provider: store.provider)
+                    store.createPackage(named: name, skillNames: skillNames, for: location)
                     isCreatingPackage = false
                 }
             )
@@ -171,7 +171,7 @@ struct ProjectDetailView: View {
         .sheet(item: $packageBeingEdited) { package in
             SkillPackageEditorView(
                 title: "Edit Package",
-                skills: store.skills(for: project),
+                skills: store.globalSkills(for: location),
                 initialName: package.name,
                 initialSkillNames: Set(package.skillNames),
                 actionTitle: "Save Package",
@@ -186,8 +186,8 @@ struct ProjectDetailView: View {
             SkillPackageManageView(
                 store: store,
                 package: package,
-                destinationProjects: packageDestinationProjects,
-                globalDestinations: GlobalSkillLocation.allCases,
+                destinationProjects: store.projects,
+                globalDestinations: otherGlobalLocations,
                 onEditPackage: { package in
                     packageBeingManaged = nil
                     DispatchQueue.main.async {
@@ -202,20 +202,20 @@ struct ProjectDetailView: View {
     }
 }
 
-private struct ProjectHeaderView: View {
+private struct GlobalSkillHeaderView: View {
     @ObservedObject var store: SkillStore
-    let project: SkillProject
+    let location: GlobalSkillLocation
     let onCreatePackage: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(project.name)
+                    Text(location.label)
                         .font(.title2.weight(.semibold))
                         .lineLimit(1)
 
-                    Text(project.path)
+                    Text(activePathDisplay)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -226,26 +226,12 @@ private struct ProjectHeaderView: View {
                 Spacer(minLength: 12)
 
                 HStack(spacing: 8) {
-                    CountBadge(title: "Enabled", count: store.activeCount(for: project), color: .green)
-                    CountBadge(title: "Disabled", count: store.inactiveCount(for: project), color: .secondary)
+                    CountBadge(title: "Enabled", count: store.activeCount(for: location), color: .green)
+                    CountBadge(title: "Disabled", count: store.inactiveCount(for: location), color: .secondary)
                 }
             }
 
             HStack(spacing: 10) {
-                Picker("Mode", selection: Binding(get: {
-                    store.provider
-                }, set: { provider in
-                    store.selectProvider(provider)
-                })) {
-                    ForEach(SkillProvider.allCases) { provider in
-                        Text(provider.label).tag(provider)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 168)
-                .help("Choose which project skill directory to manage")
-
                 Spacer(minLength: 12)
 
                 HeaderActionButton(
@@ -256,40 +242,32 @@ private struct ProjectHeaderView: View {
                     onCreatePackage()
                 }
 
-                HeaderActionButton(
-                    title: "Convert to Claude",
-                    systemImage: "arrow.triangle.2.circlepath",
-                    help: "Copy Codex skills to this project's Claude skill folders"
-                ) {
-                    store.copyCodexSkillsToClaude(in: project)
-                }
-
-                if store.activeCount(for: project) > 0 {
+                if store.activeCount(for: location) > 0 {
                     HeaderActionButton(
                         title: "Disable All",
                         systemImage: "archivebox.fill",
-                        help: "Move all enabled skills to inactive skills"
+                        help: "Move all enabled global skills to inactive skills"
                     ) {
-                        store.disableAll(in: project)
+                        store.disableAllGlobal(in: location)
                     }
                 } else {
                     HeaderActionButton(
                         title: "Enable All",
                         systemImage: "checkmark.circle.fill",
-                        help: "Move all disabled skills back to active skills",
-                        isDisabled: store.inactiveCount(for: project) == 0
+                        help: "Move all disabled global skills back to active skills",
+                        isDisabled: store.inactiveCount(for: location) == 0
                     ) {
-                        store.enableAll(in: project)
+                        store.enableAllGlobal(in: location)
                     }
                 }
 
                 Menu {
                     Button("Enabled Skills Folder") {
-                        store.revealDirectory(for: project, state: .active)
+                        store.revealGlobalDirectory(for: location, state: .active)
                     }
 
                     Button("Disabled Skills Folder") {
-                        store.revealDirectory(for: project, state: .inactive)
+                        store.revealGlobalDirectory(for: location, state: .inactive)
                     }
                 } label: {
                     Label("Folders", systemImage: "folder")
@@ -302,49 +280,8 @@ private struct ProjectHeaderView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
-}
 
-struct CountBadge: View {
-    let title: String
-    let count: Int
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Text("\(count)")
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(minWidth: 98)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(color.opacity(0.35), lineWidth: 1)
-        }
-    }
-}
-
-struct HeaderActionButton: View {
-    let title: String
-    let systemImage: String
-    let help: String
-    var isDisabled = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .lineLimit(1)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .disabled(isDisabled)
-        .help(help)
+    private var activePathDisplay: String {
+        "~/\(location.configurationDirectoryName)/\(SkillFileService.activeSkillsDirectoryName)"
     }
 }

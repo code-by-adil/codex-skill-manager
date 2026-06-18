@@ -9,7 +9,9 @@ struct ContentView: View {
             ProjectSidebarView(store: store)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if let project = store.selectedProject {
+            if let location = store.selectedGlobalLocation {
+                GlobalSkillDetailView(store: store, location: location)
+            } else if let project = store.selectedProject {
                 ProjectDetailView(store: store, project: project)
             } else {
                 EmptyProjectView(store: store)

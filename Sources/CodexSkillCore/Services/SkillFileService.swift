@@ -39,10 +39,12 @@ public struct SkillFileService {
     public static let inactiveSkillsDirectoryName = "inactive-skills"
 
     public var fileManager: FileManager
+    public var homeDirectoryURL: URL
     public var centralInactiveRootURL: URL
 
-    public init(fileManager: FileManager = .default, centralInactiveRootURL: URL? = nil) {
+    public init(fileManager: FileManager = .default, centralInactiveRootURL: URL? = nil, homeDirectoryURL: URL? = nil) {
         self.fileManager = fileManager
+        self.homeDirectoryURL = homeDirectoryURL ?? fileManager.homeDirectoryForCurrentUser
         self.centralInactiveRootURL = centralInactiveRootURL ?? Self.defaultCentralInactiveRootURL(fileManager: fileManager)
     }
 
@@ -58,13 +60,41 @@ public struct SkillFileService {
             .appendingPathComponent(Self.inactiveSkillsDirectoryName, isDirectory: true)
     }
 
+    public func globalRootDirectory(for location: GlobalSkillLocation) -> URL {
+        homeDirectoryURL.appendingPathComponent(location.configurationDirectoryName, isDirectory: true)
+    }
+
+    public func globalActiveDirectory(for location: GlobalSkillLocation) -> URL {
+        globalRootDirectory(for: location)
+            .appendingPathComponent(Self.activeSkillsDirectoryName, isDirectory: true)
+    }
+
+    public func globalInactiveDirectory(for location: GlobalSkillLocation) -> URL {
+        centralInactiveRootURL
+            .appendingPathComponent("global", isDirectory: true)
+            .appendingPathComponent(location.rawValue, isDirectory: true)
+            .appendingPathComponent(Self.inactiveSkillsDirectoryName, isDirectory: true)
+    }
+
     public func scan(project: SkillProject, provider: SkillProvider = .codex) throws -> [SkillItem] {
         try migrateLegacyInactiveSkillsIfNeeded(project: project, provider: provider)
 
         let activeSkills = try scanDirectory(activeDirectory(for: project, provider: provider), state: .active, provider: provider, project: project)
         let inactiveSkills = try scanDirectory(inactiveDirectory(for: project, provider: provider), state: .inactive, provider: provider, project: project)
 
-        return (activeSkills + inactiveSkills).sorted { first, second in
+        return sorted(activeSkills + inactiveSkills)
+    }
+
+    public func scanGlobal(location: GlobalSkillLocation) throws -> [SkillItem] {
+        let source = globalProject(for: location)
+        let activeSkills = try scanDirectory(globalActiveDirectory(for: location), state: .active, provider: .codex, project: source)
+        let inactiveSkills = try scanDirectory(globalInactiveDirectory(for: location), state: .inactive, provider: .codex, project: source)
+
+        return sorted(activeSkills + inactiveSkills)
+    }
+
+    private func sorted(_ skills: [SkillItem]) -> [SkillItem] {
+        skills.sorted { first, second in
             let nameCompare = first.name.localizedStandardCompare(second.name)
             if nameCompare == .orderedSame {
                 return first.state.rawValue < second.state.rawValue
@@ -94,22 +124,66 @@ public struct SkillFileService {
     }
 
     @discardableResult
-    public func transfer(_ skill: SkillItem, to destinationProject: SkillProject, mode: SkillTransferMode, provider: SkillProvider = .codex) throws -> URL {
-        let destinationDirectory = activeDirectory(for: destinationProject, provider: provider)
+    public func setGlobalEnabled(_ skill: SkillItem, enabled: Bool, in location: GlobalSkillLocation) throws -> URL {
+        let targetState: SkillState = enabled ? .active : .inactive
+        guard skill.state != targetState else {
+            return skill.url
+        }
+
+        let destinationDirectory = targetState == .active
+            ? globalActiveDirectory(for: location)
+            : globalInactiveDirectory(for: location)
         let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
 
         try validateSource(skill.url)
         try ensureDirectoryExists(destinationDirectory)
         try validateDestinationIsAvailable(destinationURL)
-
-        switch mode {
-        case .copy:
-            try fileManager.copyItem(at: skill.url, to: destinationURL)
-        case .move:
-            try fileManager.moveItem(at: skill.url, to: destinationURL)
-        }
+        try fileManager.moveItem(at: skill.url, to: destinationURL)
 
         return destinationURL
+    }
+
+    @discardableResult
+    public func transfer(_ skill: SkillItem, to destinationProject: SkillProject, mode: SkillTransferMode, provider: SkillProvider = .codex) throws -> URL {
+        let destinationDirectory = activeDirectory(for: destinationProject, provider: provider)
+        return try transfer(skill, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func transfer(_ skills: [SkillItem], to destinationProject: SkillProject, mode: SkillTransferMode, provider: SkillProvider = .codex) throws -> [URL] {
+        let destinationDirectory = activeDirectory(for: destinationProject, provider: provider)
+        return try transfer(skills, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func transferGlobal(_ skill: SkillItem, to destinationProject: SkillProject, mode: SkillTransferMode, provider: SkillProvider = .codex) throws -> URL {
+        let destinationDirectory = activeDirectory(for: destinationProject, provider: provider)
+        return try transfer(skill, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func transferGlobal(_ skills: [SkillItem], to destinationProject: SkillProject, mode: SkillTransferMode, provider: SkillProvider = .codex) throws -> [URL] {
+        let destinationDirectory = activeDirectory(for: destinationProject, provider: provider)
+        return try transfer(skills, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func transfer(_ skill: SkillItem, toGlobal location: GlobalSkillLocation, mode: SkillTransferMode) throws -> URL {
+        let destinationDirectory = globalActiveDirectory(for: location)
+        return try transfer(skill, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func transfer(_ skills: [SkillItem], toGlobal location: GlobalSkillLocation, mode: SkillTransferMode) throws -> [URL] {
+        let destinationDirectory = globalActiveDirectory(for: location)
+        return try transfer(skills, toActiveDirectory: destinationDirectory, mode: mode)
+    }
+
+    @discardableResult
+    public func delete(_ skill: SkillItem) throws -> URL {
+        try validateSource(skill.url)
+        try fileManager.removeItem(at: skill.url)
+        return skill.url
     }
 
     @discardableResult
@@ -137,6 +211,30 @@ public struct SkillFileService {
     }
 
     @discardableResult
+    public func disableAllGlobal(in location: GlobalSkillLocation) throws -> Int {
+        let skillsToDisable = try scanGlobal(location: location).filter { $0.state == .active }
+        guard !skillsToDisable.isEmpty else {
+            return 0
+        }
+
+        let destinationDirectory = globalInactiveDirectory(for: location)
+        try ensureDirectoryExists(destinationDirectory)
+
+        for skill in skillsToDisable {
+            try validateSource(skill.url)
+            let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+            try validateDestinationIsAvailable(destinationURL)
+        }
+
+        for skill in skillsToDisable {
+            let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+            try fileManager.moveItem(at: skill.url, to: destinationURL)
+        }
+
+        return skillsToDisable.count
+    }
+
+    @discardableResult
     public func enableAll(in project: SkillProject, provider: SkillProvider = .codex) throws -> Int {
         let skillsToEnable = try scan(project: project, provider: provider).filter { $0.state == .inactive }
         guard !skillsToEnable.isEmpty else {
@@ -144,6 +242,30 @@ public struct SkillFileService {
         }
 
         let destinationDirectory = activeDirectory(for: project, provider: provider)
+        try ensureDirectoryExists(destinationDirectory)
+
+        for skill in skillsToEnable {
+            try validateSource(skill.url)
+            let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+            try validateDestinationIsAvailable(destinationURL)
+        }
+
+        for skill in skillsToEnable {
+            let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+            try fileManager.moveItem(at: skill.url, to: destinationURL)
+        }
+
+        return skillsToEnable.count
+    }
+
+    @discardableResult
+    public func enableAllGlobal(in location: GlobalSkillLocation) throws -> Int {
+        let skillsToEnable = try scanGlobal(location: location).filter { $0.state == .inactive }
+        guard !skillsToEnable.isEmpty else {
+            return 0
+        }
+
+        let destinationDirectory = globalActiveDirectory(for: location)
         try ensureDirectoryExists(destinationDirectory)
 
         for skill in skillsToEnable {
@@ -206,8 +328,71 @@ public struct SkillFileService {
         try ensureDirectoryExists(inactiveDirectory(for: project, provider: provider))
     }
 
+    public func ensureGlobalSkillDirectories(for location: GlobalSkillLocation) throws {
+        try ensureDirectoryExists(globalActiveDirectory(for: location))
+        try ensureDirectoryExists(globalInactiveDirectory(for: location))
+    }
+
     private func rootDirectory(for project: SkillProject, provider: SkillProvider) -> URL {
         project.url.appendingPathComponent(provider.configurationDirectoryName, isDirectory: true)
+    }
+
+    private func globalProject(for location: GlobalSkillLocation) -> SkillProject {
+        SkillProject(
+            id: location.storageID,
+            name: location.label,
+            path: globalRootDirectory(for: location).path
+        )
+    }
+
+    @discardableResult
+    private func transfer(_ skill: SkillItem, toActiveDirectory destinationDirectory: URL, mode: SkillTransferMode) throws -> URL {
+        let destinationURL = destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+
+        try validateSource(skill.url)
+        try ensureDirectoryExists(destinationDirectory)
+        try validateDestinationIsAvailable(destinationURL)
+
+        switch mode {
+        case .copy:
+            try fileManager.copyItem(at: skill.url, to: destinationURL)
+        case .move:
+            try fileManager.moveItem(at: skill.url, to: destinationURL)
+        }
+
+        return destinationURL
+    }
+
+    @discardableResult
+    private func transfer(_ skills: [SkillItem], toActiveDirectory destinationDirectory: URL, mode: SkillTransferMode) throws -> [URL] {
+        guard !skills.isEmpty else {
+            return []
+        }
+
+        let destinationURLs = skills.map { skill in
+            destinationDirectory.appendingPathComponent(skill.name, isDirectory: true)
+        }
+
+        try ensureDirectoryExists(destinationDirectory)
+
+        for skill in skills {
+            try validateSource(skill.url)
+        }
+
+        for destinationURL in destinationURLs {
+            try validateDestinationIsAvailable(destinationURL)
+        }
+
+        for (skill, destinationURL) in zip(skills, destinationURLs) {
+            switch mode {
+            case .copy:
+                try fileManager.copyItem(at: skill.url, to: destinationURL)
+            case .move:
+                try fileManager.moveItem(at: skill.url, to: destinationURL)
+            }
+        }
+
+        return destinationURLs
     }
 
     private func legacyInactiveDirectory(for project: SkillProject, provider: SkillProvider) -> URL {

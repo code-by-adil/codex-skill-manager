@@ -124,6 +124,9 @@ struct MenuBarPanelView: View {
                                         if let destinationURL = ProjectOpenPanel.selectTransferDestination() {
                                             store.transfer(skill, toProjectAt: destinationURL, mode: mode)
                                         }
+                                    },
+                                    onDelete: {
+                                        store.delete(skill)
                                     }
                                 )
                             }
@@ -215,6 +218,9 @@ private struct MenuSkillRow: View {
     let onToggle: () -> Void
     let onTransfer: (SkillProject, SkillTransferMode) -> Void
     let onChooseDestination: (SkillTransferMode) -> Void
+    let onDelete: () -> Void
+
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -280,13 +286,32 @@ private struct MenuSkillRow: View {
                         onChooseDestination(.move)
                     }
                 }
+
+                Divider()
+
+                Button("Delete Skill", role: .destructive) {
+                    isConfirmingDelete = true
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .frame(width: 20, height: 20)
             }
             .buttonStyle(.borderless)
-            .help("Copy or move skill")
+            .help("More skill actions")
         }
         .background(.quaternary.opacity(0.0001), in: RoundedRectangle(cornerRadius: 6))
+        .confirmationDialog(
+            "Delete \(skill.name)?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Permanently", role: .destructive) {
+                onDelete()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes the skill folder immediately. It cannot be restored from Codex Skill Manager.")
+        }
     }
 }

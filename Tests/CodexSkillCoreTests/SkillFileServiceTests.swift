@@ -10,7 +10,8 @@ final class SkillFileServiceTests: XCTestCase {
             .appendingPathComponent("CodexSkillCoreTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
         service = SkillFileService(
-            centralInactiveRootURL: temporaryRoot.appendingPathComponent("CentralInactive", isDirectory: true)
+            centralInactiveRootURL: temporaryRoot.appendingPathComponent("CentralInactive", isDirectory: true),
+            homeDirectoryURL: temporaryRoot.appendingPathComponent("Home", isDirectory: true)
         )
     }
 
@@ -112,6 +113,189 @@ final class SkillFileServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    func testScanReadsGlobalCodexSkillsFromDotCodex() throws {
+        try makeSkill(named: "codex-global", in: service.globalActiveDirectory(for: .codex))
+        try makeSkill(named: "codex-disabled", in: service.globalInactiveDirectory(for: .codex))
+
+        let skills = try service.scanGlobal(location: .codex)
+
+        XCTAssertEqual(skills.map(\.name), ["codex-disabled", "codex-global"])
+        XCTAssertEqual(skills.first { $0.name == "codex-global" }?.state, .active)
+        XCTAssertEqual(skills.first { $0.name == "codex-disabled" }?.state, .inactive)
+        XCTAssertEqual(
+            service.globalActiveDirectory(for: .codex).path,
+            temporaryRoot.appendingPathComponent("Home/.codex/skills", isDirectory: true).path
+        )
+    }
+
+    func testScanReadsGlobalAgentsSkillsFromDotAgents() throws {
+        try makeSkill(named: "agents-global", in: service.globalActiveDirectory(for: .agents))
+
+        let skills = try service.scanGlobal(location: .agents)
+
+        XCTAssertEqual(skills.map(\.name), ["agents-global"])
+        XCTAssertEqual(skills.first?.state, .active)
+        XCTAssertEqual(
+            service.globalActiveDirectory(for: .agents).path,
+            temporaryRoot.appendingPathComponent("Home/.agents/skills", isDirectory: true).path
+        )
+    }
+
+    func testDisablingGlobalSkillMovesToGlobalInactiveDirectory() throws {
+        try makeSkill(named: "global-skill", in: service.globalActiveDirectory(for: .codex))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .codex).first)
+
+        let destination = try service.setGlobalEnabled(skill, enabled: false, in: .codex)
+
+        XCTAssertEqual(destination.path, service.globalInactiveDirectory(for: .codex).appendingPathComponent("global-skill").path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .codex).appendingPathComponent("global-skill").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testEnableAllGlobalMovesInactiveSkillsToActiveDirectory() throws {
+        try makeSkill(named: "already-enabled", in: service.globalActiveDirectory(for: .agents))
+        try makeSkill(named: "first", in: service.globalInactiveDirectory(for: .agents))
+        try makeSkill(named: "second", in: service.globalInactiveDirectory(for: .agents))
+
+        let enabledCount = try service.enableAllGlobal(in: .agents)
+
+        XCTAssertEqual(enabledCount, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .agents).appendingPathComponent("already-enabled").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .agents).appendingPathComponent("first").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .agents).appendingPathComponent("second").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalInactiveDirectory(for: .agents).appendingPathComponent("first").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalInactiveDirectory(for: .agents).appendingPathComponent("second").path))
+    }
+
+    func testCopyGlobalSkillToProjectActiveDirectory() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "global-copy", in: service.globalActiveDirectory(for: .codex))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .codex).first)
+
+        let destination = try service.transferGlobal(skill, to: project, mode: .copy)
+
+        XCTAssertEqual(destination.path, service.activeDirectory(for: project).appendingPathComponent("global-copy").path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .codex).appendingPathComponent("global-copy").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testMoveDisabledGlobalSkillToProjectActiveDirectory() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "global-move", in: service.globalInactiveDirectory(for: .agents))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .agents).first)
+
+        let destination = try service.transferGlobal(skill, to: project, mode: .move)
+
+        XCTAssertEqual(destination.path, service.activeDirectory(for: project).appendingPathComponent("global-move").path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalInactiveDirectory(for: .agents).appendingPathComponent("global-move").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testCopyProjectSkillToGlobalActiveDirectory() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "project-copy", in: service.activeDirectory(for: project))
+        let skill = try XCTUnwrap(try service.scan(project: project).first)
+
+        let destination = try service.transfer(skill, toGlobal: .codex, mode: .copy)
+
+        XCTAssertEqual(destination.path, service.globalActiveDirectory(for: .codex).appendingPathComponent("project-copy").path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: project).appendingPathComponent("project-copy").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testMoveDisabledProjectSkillToGlobalActiveDirectory() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "project-move", in: service.inactiveDirectory(for: project))
+        let skill = try XCTUnwrap(try service.scan(project: project).first)
+
+        let destination = try service.transfer(skill, toGlobal: .agents, mode: .move)
+
+        XCTAssertEqual(destination.path, service.globalActiveDirectory(for: .agents).appendingPathComponent("project-move").path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.inactiveDirectory(for: project).appendingPathComponent("project-move").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testTransferToGlobalPreflightsDestinationConflictBeforeMoving() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "conflict", in: service.activeDirectory(for: project))
+        try makeSkill(named: "conflict", in: service.globalActiveDirectory(for: .codex))
+        let skill = try XCTUnwrap(try service.scan(project: project).first)
+
+        XCTAssertThrowsError(try service.transfer(skill, toGlobal: .codex, mode: .move))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: project).appendingPathComponent("conflict").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .codex).appendingPathComponent("conflict").path))
+    }
+
+    func testDeleteRemovesActiveProjectSkillPermanently() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "delete-me", in: service.activeDirectory(for: project))
+        let skill = try XCTUnwrap(try service.scan(project: project).first)
+
+        let deletedURL = try service.delete(skill)
+
+        XCTAssertEqual(deletedURL.lastPathComponent, "delete-me")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deletedURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.activeDirectory(for: project).appendingPathComponent("delete-me").path))
+        XCTAssertTrue(try service.scan(project: project).isEmpty)
+    }
+
+    func testDeleteRemovesInactiveProjectSkillPermanently() throws {
+        let project = try makeProject(named: "Project")
+        try makeSkill(named: "delete-disabled", in: service.inactiveDirectory(for: project))
+        let skill = try XCTUnwrap(try service.scan(project: project).first)
+
+        let deletedURL = try service.delete(skill)
+
+        XCTAssertEqual(deletedURL.lastPathComponent, "delete-disabled")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deletedURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.inactiveDirectory(for: project).appendingPathComponent("delete-disabled").path))
+        XCTAssertTrue(try service.scan(project: project).isEmpty)
+    }
+
+    func testDeleteRemovesGlobalSkillPermanently() throws {
+        try makeSkill(named: "delete-global", in: service.globalActiveDirectory(for: .agents))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .agents).first)
+
+        let deletedURL = try service.delete(skill)
+
+        XCTAssertEqual(deletedURL.lastPathComponent, "delete-global")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deletedURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .agents).appendingPathComponent("delete-global").path))
+        XCTAssertTrue(try service.scanGlobal(location: .agents).isEmpty)
+    }
+
+    func testCopyCodexGlobalSkillToAgentsGlobalActiveDirectory() throws {
+        try makeSkill(named: "codex-to-agents", in: service.globalActiveDirectory(for: .codex))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .codex).first)
+
+        let destination = try service.transfer(skill, toGlobal: .agents, mode: .copy)
+
+        XCTAssertEqual(destination.path, service.globalActiveDirectory(for: .agents).appendingPathComponent("codex-to-agents").path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .codex).appendingPathComponent("codex-to-agents").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testMoveDisabledAgentsGlobalSkillToCodexGlobalActiveDirectory() throws {
+        try makeSkill(named: "agents-to-codex", in: service.globalInactiveDirectory(for: .agents))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .agents).first)
+
+        let destination = try service.transfer(skill, toGlobal: .codex, mode: .move)
+
+        XCTAssertEqual(destination.path, service.globalActiveDirectory(for: .codex).appendingPathComponent("agents-to-codex").path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.globalInactiveDirectory(for: .agents).appendingPathComponent("agents-to-codex").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testGlobalToGlobalMovePreflightsDestinationConflictBeforeMoving() throws {
+        try makeSkill(named: "conflict", in: service.globalActiveDirectory(for: .codex))
+        try makeSkill(named: "conflict", in: service.globalActiveDirectory(for: .agents))
+        let skill = try XCTUnwrap(try service.scanGlobal(location: .codex).first)
+
+        XCTAssertThrowsError(try service.transfer(skill, toGlobal: .agents, mode: .move))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .codex).appendingPathComponent("conflict").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.globalActiveDirectory(for: .agents).appendingPathComponent("conflict").path))
+    }
+
     func testCopyCodexSkillsToClaudePreservesEnabledState() throws {
         let project = try makeProject(named: "Project")
         try makeSkill(named: "enabled-skill", in: service.activeDirectory(for: project, provider: .codex))
@@ -138,6 +322,36 @@ final class SkillFileServiceTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: service.inactiveDirectory(for: sourceProject).appendingPathComponent("shared-skill").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: destinationProject).appendingPathComponent("shared-skill").path))
+    }
+
+    func testBulkCopyTransfersAllSkillsToDestinationActiveDirectory() throws {
+        let sourceProject = try makeProject(named: "Source")
+        let destinationProject = try makeProject(named: "Destination")
+        try makeSkill(named: "first", in: service.activeDirectory(for: sourceProject))
+        try makeSkill(named: "second", in: service.inactiveDirectory(for: sourceProject))
+        let skills = try service.scan(project: sourceProject)
+
+        let destinations = try service.transfer(skills, to: destinationProject, mode: .copy)
+
+        XCTAssertEqual(destinations.count, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: destinationProject).appendingPathComponent("first").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: destinationProject).appendingPathComponent("second").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: sourceProject).appendingPathComponent("first").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.inactiveDirectory(for: sourceProject).appendingPathComponent("second").path))
+    }
+
+    func testBulkMovePreflightsDestinationConflictsBeforeMoving() throws {
+        let sourceProject = try makeProject(named: "Source")
+        let destinationProject = try makeProject(named: "Destination")
+        try makeSkill(named: "conflict", in: service.activeDirectory(for: sourceProject))
+        try makeSkill(named: "other", in: service.activeDirectory(for: sourceProject))
+        try makeSkill(named: "conflict", in: service.activeDirectory(for: destinationProject))
+        let skills = try service.scan(project: sourceProject)
+
+        XCTAssertThrowsError(try service.transfer(skills, to: destinationProject, mode: .move))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: sourceProject).appendingPathComponent("conflict").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.activeDirectory(for: sourceProject).appendingPathComponent("other").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: service.activeDirectory(for: destinationProject).appendingPathComponent("other").path))
     }
 
     func testDisableAllMovesActiveSkillsToInactiveDirectory() throws {
